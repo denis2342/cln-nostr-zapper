@@ -1,4 +1,5 @@
 {
+	"type": "module",
   "name": "nostr-tip",
   "description": "nostr cln tipping plugin",
   "version": "0.1.0",

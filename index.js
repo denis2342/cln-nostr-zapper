@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 
-const {RelayPool, Relay, signId, calculateId, getPublicKey} = require('nostr')
-const fs = require('fs').promises
-const {spawn} = require('node:child_process')
+import {RelayPool, Relay, signId, calculateId, getPublicKey} from "nostr"
+import fs from 'fs/promises'
+
+import LightningRPC from "./rpc.js"
 
 function relay_send(ev, url, opts) {
 	const timeout = (opts && opts.timeout != null && opts.timeout) || 1000
@@ -140,49 +141,22 @@ async function make_zap_note({keypair, invoice, zapreq, ptag, etag}) {
 	return ev
 }
 
-async function get_invoice(label)
+async function run_zapper(args)
 {
-	const {invoices} = await callrpc("listinvoices", {label})
-	return invoices && invoices[0]
-}
-
-function dospawn(cmd, ...args)
-{
-	return new Promise((resolve, reject) => {
-		const proc = spawn(cmd, [...args])
-		proc.stdout.on('data', (data) => {
-			resolve(data.toString("utf8").trim())
-		})
-		proc.on('close', code => {
-			resolve(code)
-		});
-	})
-}
-
-
-async function callrpc(rpc, args) {
-	const params = Object.keys(args).map(key => `${key}=${args[key]}`)
-	const res = await dospawn("lightning-cli", rpc, params)
-	return JSON.parse(res)
-}
-
-async function waitanyinvoice(index) {
-	const res = await callrpc("waitanyinvoice", index)
-	return res
-}
-
-async function run_zapper(args) {
 	const privkey = process.env.NOSTR_KEY
 	if (!privkey) {
 		console.log("set NOSTR_KEY")
 		return
 	}
+
+	let rpc = new LightningRPC(`~/.lightning/bitcoin/lightning-rpc`);
+
 	let lastpay_index = parseInt(args[0]) || await read_lastpay_index()
 	while (true) {
 		const params = {lastpay_index}
 		console.log("waitanyinvoice %o", params)
 		try {
-			const invoice = await waitanyinvoice(params)
+			const invoice = await rpc.waitanyinvoice(params)
 			if (!invoice || invoice === "") {
 				console.log("invoice fail", invoice)
 				process.exit(5)
@@ -213,6 +187,5 @@ async function read_lastpay_index() {
 async function write_lastpay_index(lastpay_index) {
 	await fs.writeFile(lastpay_file, lastpay_index.toString())
 }
-
 
 run_zapper(process.argv.slice(2))
